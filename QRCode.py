@@ -10,7 +10,7 @@ import traceback
 app = adsk.core.Application.get()
 ui = app.userInterface
 # TODO *** Specify the command identity information. ***
-CMD_ID = "TaraCon_QR_Code"
+CMD_ID = "QR_Code"
 CMD_NAME = 'QR Code'
 CMD_Description = '' #Add a description of the add-in
 IS_PROMOTED = True
