@@ -179,6 +179,9 @@ def CreateMatrix(Text, Size, Voxels):
         CombineCollection = adsk.core.ObjectCollection.create()
         BoxSize = Size
         Start_x, Start_Y = 0,((len(qrMatrix)-1) * BoxSize)
+        Number = 0
+        TotalVoxels = len(qrMatrix)*2
+        ui.progressBar.show("", 0, TotalVoxels, True)
         for row_idx, row in enumerate(qrMatrix):
             for col_idx, cell in enumerate(row):
                 if cell == True:
@@ -213,6 +216,9 @@ def CreateMatrix(Text, Size, Voxels):
                         tempBrepMgr.booleanOperation(CombineCollection.item(0), Box, adsk.fusion.BooleanTypes.UnionBooleanType)
                     elif CombineCollection.count == 0:
                         CombineCollection.add(Box)
+                    ui.progressBar.progressValue = Number
+                    Number += 1
+        ui.progressBar.hide()
         createdPixel = rootComp.bRepBodies.add(CombineCollection.item(0)) 
         MovedBody = createdPixel.moveToComponent(QRComp)
         MovedBody.isSelectable = False
