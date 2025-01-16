@@ -99,7 +99,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
     # General logging for debug.
     futil.log(f'{CMD_NAME} Command Execute Event')
     global Size
-    global SelectedDefault
+    
 
     inputs = args.command.commandInputs
     #BasePlaneSelecter: adsk.core.SelectionCommandInput = inputs.itemById("BasePlane")
@@ -107,18 +107,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
     size: adsk.core.ValueCommandInput = inputs.itemById("Size")
     ShapeChoice: adsk.core.DropDownCommandInput = inputs.itemById("ShapeSelect")
 
-    if ShapeChoice.selectedItem.name == "Square":
-        SquarePixels(Text.text, size.value)
-        SelectedDefault = 0
-    elif ShapeChoice.selectedItem.name == "Cube":
-        CubePixels(Text.text, size.value)
-        SelectedDefault = 1
-    elif ShapeChoice.selectedItem.name == "Sphere":
-        SpherePixels(Text.text, size.value)
-        SelectedDefault = 2
-    elif ShapeChoice.selectedItem.name == "Circle":
-        CirclePixels(Text.text, size.value)
-        SelectedDefault = 3
+    CreateMatrix(Text.text, size.value, ShapeChoice.selectedItem.name)
+
     Size = size.value
     
 
@@ -168,21 +158,18 @@ def command_destroy(args: adsk.core.CommandEventArgs):
     global local_handlers
     local_handlers = []
 
-def InsertCommand(RootComp, Command: str):
-    sels = ui.activeSelections
-    sels.clear()
-    sels.add(RootComp)
-    app.executeTextCommand("Commands.Start " + Command)
-    sels.clear()
 
-def SquarePixels(Text, Size):
+
+def CreateMatrix(Text, Size, Voxels):
     Plane: adsk.fusion.ConstructionPlane
     ui = None
+    global SelectedDefault
     try:
         app = adsk.core.Application.get()
         ui  = app.userInterface
         design: adsk.fusion.Design = app.activeProduct         
-        rootComp: adsk.fusion.Component = design.rootComponent    
+        rootComp: adsk.fusion.Component = design.rootComponent  
+        tempBrepMgr = adsk.fusion.TemporaryBRepManager.get()  
         QRComp = rootComp.occurrences.addNewComponent(adsk.core.Matrix3D.create())
         QRComp.component.name = f"QR Code: {Text}"
         qr = qrcode.QRCode(box_size=1, border=0)
@@ -190,270 +177,70 @@ def SquarePixels(Text, Size):
         qr.make(fit=True)
         qrMatrix = qr.get_matrix()
         CombineCollection = adsk.core.ObjectCollection.create()
-        ExtrudeCollection = adsk.core.ObjectCollection.create()
-        progressDialog = ui.createProgressDialog()
-        progressDialog.cancelButtonText = 'Cancel'
-        progressDialog.isBackgroundTranslucent = False
-        progressDialog.isCancelButtonShown = True
-        True_Count = sum(row.count(True) for row in qrMatrix)
-        progressDialog.show('Progress Dialog', f"%p% Completed\n%v of %m", 0, True_Count)
-        PixelCount = 1
         BoxSize = Size
-        Start_x, Start_Y = 0,0
+        Start_x, Start_Y = 0,((len(qrMatrix)-1) * BoxSize)
         for row_idx, row in enumerate(qrMatrix):
-            if progressDialog.wasCancelled:
-                break
             for col_idx, cell in enumerate(row):
-                if progressDialog.wasCancelled:
-                    break
                 if cell == True:
                     x = Start_x + col_idx * BoxSize
-                    y = Start_Y + row_idx * BoxSize
+                    y = Start_Y - row_idx * BoxSize
                     rect_points = [
                         adsk.core.Point3D.create(x, y, 0),
                         adsk.core.Point3D.create(x + BoxSize, y, 0),
                         adsk.core.Point3D.create(x + BoxSize, y + BoxSize, 0),
                         adsk.core.Point3D.create(x, y + BoxSize, 0)
                     ]
-                    QRSketch = rootComp.sketches.addWithoutEdges(rootComp.xYConstructionPlane)
-                    Square = QRSketch.sketchCurves.sketchLines.addTwoPointRectangle(rect_points[0], rect_points[2]) 
-                    Profile = QRSketch.profiles.item(0)
-                    ExtrudeCollection.add(Profile)
-                    extrude = rootComp.features.extrudeFeatures                    
-                    Distance = adsk.core.ValueInput.createByReal(1)
-                    ExtrudeBody = extrude.addSimple(Profile, Distance, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-                    createdPixel = ExtrudeBody.bodies.item(0)
-                    createdPixel.isSelectable = False
-                    MovedPixel = createdPixel.moveToComponent(QRComp)
-                    CombineCollection.add(MovedPixel)
-                    QRSketch.deleteMe()
-                    Feature = QRComp.component.features.item(0)
-                    Feature.dissolve()
-                    progressDialog.progressValue = PixelCount
-                    PixelCount += 1
-        progressDialog.hide()
-        Combine = QRComp.component.features.combineFeatures
-        Combine.createInput(QRComp.bRepBodies.item(0), CombineCollection)
-        CombineCollection.removeByIndex(0)
-        input: adsk.fusion.CombineFeatureInput = Combine.createInput(QRComp.bRepBodies.item(0), CombineCollection)
-        input.isNewComponent = False
-        input.isKeepToolBodies = False
-        input.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
-        combineFeature = Combine.add(input)
-    except:
-        if ui:
-            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
-
-def CubePixels(Text, Size):
-    Plane: adsk.fusion.ConstructionPlane
-    ui = None
-    try:
-        app = adsk.core.Application.get()
-        ui  = app.userInterface
-        design: adsk.fusion.Design = app.activeProduct         
-        rootComp: adsk.fusion.Component = design.rootComponent    
-        QRComp = rootComp.occurrences.addNewComponent(adsk.core.Matrix3D.create())
-        QRComp.component.name = f"QR Code: {Text}"
-        qr = qrcode.QRCode(box_size=1, border=0)
-        qr.add_data(Text)
-        qr.make(fit=True)
-        qrMatrix = qr.get_matrix()
-        CombineCollection = adsk.core.ObjectCollection.create()
-        ExtrudeCollection = adsk.core.ObjectCollection.create()
-        progressDialog = ui.createProgressDialog()
-        progressDialog.cancelButtonText = 'Cancel'
-        progressDialog.isBackgroundTranslucent = False
-        progressDialog.isCancelButtonShown = True
-        True_Count = sum(row.count(True) for row in qrMatrix)
-        progressDialog.show('Progress Dialog', f"%p% Completed\n%v of %m", 0, True_Count)
-        PixelCount = 1
-        BoxSize = Size
-        Start_x, Start_Y = 0,0
-        for row_idx, row in enumerate(qrMatrix):
-            if progressDialog.wasCancelled:
-                break
-            for col_idx, cell in enumerate(row):
-                if progressDialog.wasCancelled:
-                    break
-                if cell == True:
-                    x = Start_x + col_idx * BoxSize
-                    y = Start_Y + row_idx * BoxSize
-                    rect_points = [
-                        adsk.core.Point3D.create(x, y, 0),
-                        adsk.core.Point3D.create(x + BoxSize, y, 0),
-                        adsk.core.Point3D.create(x + BoxSize, y + BoxSize, 0),
-                        adsk.core.Point3D.create(x, y + BoxSize, 0)
-                    ]
-                    QRSketch = rootComp.sketches.addWithoutEdges(rootComp.xYConstructionPlane)
-                    Square = QRSketch.sketchCurves.sketchLines.addTwoPointRectangle(rect_points[0], rect_points[2]) 
-                    Profile = QRSketch.profiles.item(0)
-                    ExtrudeCollection.add(Profile)
-                    extrude = rootComp.features.extrudeFeatures                    
-                    Distance = adsk.core.ValueInput.createByReal(BoxSize)
-                    ExtrudeBody = extrude.addSimple(Profile, Distance, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-                    createdPixel = ExtrudeBody.bodies.item(0)
-                    createdPixel.isSelectable = False
-                    MovedPixel = createdPixel.moveToComponent(QRComp)
-                    CombineCollection.add(MovedPixel)
-                    QRSketch.deleteMe()
-                    Feature = QRComp.component.features.item(0)
-                    Feature.dissolve()
-                    progressDialog.progressValue = PixelCount
-                    PixelCount += 1
-        progressDialog.hide()
-        Combine = QRComp.component.features.combineFeatures
-        Combine.createInput(QRComp.bRepBodies.item(0), CombineCollection)
-        CombineCollection.removeByIndex(0)
-        input: adsk.fusion.CombineFeatureInput = Combine.createInput(QRComp.bRepBodies.item(0), CombineCollection)
-        input.isNewComponent = False
-        input.isKeepToolBodies = False
-        input.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
-        combineFeature = Combine.add(input)
-    except:
-        if ui:
-            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
-
-
-def SpherePixels(Text, Size):
-    Plane: adsk.fusion.ConstructionPlane
-    ui = None
-    try:
-        app = adsk.core.Application.get()
-        ui  = app.userInterface
-        design: adsk.fusion.Design = app.activeProduct         
-        rootComp: adsk.fusion.Component = design.rootComponent    
-        QRComp = rootComp.occurrences.addNewComponent(adsk.core.Matrix3D.create())
-        QRComp.component.name = f"QR Code: {Text}"
-        qr = qrcode.QRCode(box_size=1, border=0)
-        qr.add_data(Text)
-        qr.make(fit=True)
-        qrMatrix = qr.get_matrix()
-        FilletCollection = adsk.core.ObjectCollection.create()
-        ExtrudeCollection = adsk.core.ObjectCollection.create()
-        progressDialog = ui.createProgressDialog()
-        progressDialog.cancelButtonText = 'Cancel'
-        progressDialog.isBackgroundTranslucent = False
-        progressDialog.isCancelButtonShown = True
-        True_Count = sum(row.count(True) for row in qrMatrix)
-        progressDialog.show('Progress Dialog', f"%p% Completed\n%v of %m", 0, True_Count)
-        PixelCount = 1
-        BoxSize = Size
-        Start_x, Start_Y = 0,0
-        QRSketch = rootComp.sketches.addWithoutEdges(rootComp.xYConstructionPlane)
-        for row_idx, row in enumerate(qrMatrix):
-            if progressDialog.wasCancelled:
-                break
-            for col_idx, cell in enumerate(row):
-                if progressDialog.wasCancelled:
-                    break
-                if cell == True:
-                    x = Start_x + col_idx * BoxSize
-                    y = Start_Y + row_idx * BoxSize
-                    rect_points = [
-                        adsk.core.Point3D.create(x, y, 0),
-                        adsk.core.Point3D.create(x + BoxSize, y, 0),
-                        adsk.core.Point3D.create(x + BoxSize, y + BoxSize, 0),
-                        adsk.core.Point3D.create(x, y + BoxSize, 0)
-                    ]
+                    CenterLine = adsk.core.Line3D.create(rect_points[0], rect_points[2])
+                    (__, SP, EP) = CenterLine.evaluator.getParameterExtents()
+                    (__, MP) = CenterLine.evaluator.getPointAtParameter((SP + EP) / 2)
+                    LineLength = rect_points[0].vectorTo(rect_points[1])
+                    LineWidth = rect_points[0].vectorTo(rect_points[3])
                     
-                    #Square = QRSketch.sketchCurves.sketchLines.addTwoPointRectangle(rect_points[0], rect_points[2]) 
-                    Line = adsk.core.Line3D.create(rect_points[0], rect_points[2])
-                    (__, SP, EP) = Line.evaluator.getParameterExtents()
-                    (__, MP) = Line.evaluator.getPointAtParameter((SP + EP) / 2)
-                    RLine = adsk.core.Line3D.create(rect_points[0], rect_points[1])
-                    LineLength = Line.startPoint.distanceTo(Line.endPoint)
-                    Circle = QRSketch.sketchCurves.sketchCircles.addByCenterRadius(MP, LineLength / 3)
-                    progressDialog.progressValue = PixelCount
-                    PixelCount += 1
-        for Profile in QRSketch.profiles:
-            ExtrudeCollection.add(Profile)
-        extrude = QRComp.component.features.extrudeFeatures                    
-        Distance = adsk.core.ValueInput.createByReal(LineLength - LineLength / 3)
-        ExtrudeBody = extrude.addSimple(ExtrudeCollection, Distance, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        ExtrudeBody.dissolve()
-        QRSketch.deleteMe()
-        progressDialog.hide()
-        FilletEdgeSet = []
-        for Body in QRComp.bRepBodies:
-            Body.isSelectable = False
-            for edge in Body.edges:
-                FilletCollection.add(edge)
-        fillets = QRComp.component.features.filletFeatures
-        radius1 = adsk.core.ValueInput.createByReal(Distance.realValue/2)
-        FilletInput = fillets.createInput()
-        FilletInput.isRollingBallCorner = True
-        constRadiusInput = FilletInput.edgeSetInputs.addConstantRadiusEdgeSet(FilletCollection, radius1, True)
-        constRadiusInput.continuity = adsk.fusion.SurfaceContinuityTypes.TangentSurfaceContinuityType
-        
-        fillet1 = fillets.add(FilletInput)
-        fillet1.dissolve()
-        #
+                    if Voxels == "Square":
+                        Box = CreateSquare(MP, BoxSize, LineLength, LineWidth)
+                        SelectedDefault = 0
+                    if Voxels == "Cube":
+                        Box = CreateCube(MP, BoxSize, LineLength, LineWidth)
+                        SelectedDefault = 1
+                    if Voxels == "Sphere":
+                        Box = CreateSphere(MP, BoxSize)
+                        SelectedDefault = 2
+                    if Voxels == "Circle":
+                        Box = CreateCircle(MP, BoxSize)
+                        SelectedDefault = 3
+
+                    if CombineCollection.count > 0:
+                        tempBrepMgr.booleanOperation(CombineCollection.item(0), Box, adsk.fusion.BooleanTypes.UnionBooleanType)
+                    elif CombineCollection.count == 0:
+                        CombineCollection.add(Box)
+        createdPixel = rootComp.bRepBodies.add(CombineCollection.item(0)) 
+        MovedBody = createdPixel.moveToComponent(QRComp)
+        MovedBody.isSelectable = False
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
-def CirclePixels(Text, Size):
-    Plane: adsk.fusion.ConstructionPlane
-    ui = None
-    try:
-        app = adsk.core.Application.get()
-        ui  = app.userInterface
-        design: adsk.fusion.Design = app.activeProduct         
-        rootComp: adsk.fusion.Component = design.rootComponent    
-        QRComp = rootComp.occurrences.addNewComponent(adsk.core.Matrix3D.create())
-        QRComp.component.name = f"QR Code: {Text}"
-        qr = qrcode.QRCode(box_size=1, border=0)
-        qr.add_data(Text)
-        qr.make(fit=True)
-        qrMatrix = qr.get_matrix()
-        FilletCollection = adsk.core.ObjectCollection.create()
-        ExtrudeCollection = adsk.core.ObjectCollection.create()
-        progressDialog = ui.createProgressDialog()
-        progressDialog.cancelButtonText = 'Cancel'
-        progressDialog.isBackgroundTranslucent = False
-        progressDialog.isCancelButtonShown = True
-        True_Count = sum(row.count(True) for row in qrMatrix)
-        progressDialog.show('Progress Dialog', f"%p% Completed\n%v of %m", 0, True_Count)
-        PixelCount = 1
-        BoxSize = Size
-        Start_x, Start_Y = 0,0
-        QRSketch = rootComp.sketches.addWithoutEdges(rootComp.xYConstructionPlane)
-        for row_idx, row in enumerate(qrMatrix):
-            if progressDialog.wasCancelled:
-                break
-            for col_idx, cell in enumerate(row):
-                if progressDialog.wasCancelled:
-                    break
-                if cell == True:
-                    x = Start_x + col_idx * BoxSize
-                    y = Start_Y + row_idx * BoxSize
-                    rect_points = [
-                        adsk.core.Point3D.create(x, y, 0),
-                        adsk.core.Point3D.create(x + BoxSize, y, 0),
-                        adsk.core.Point3D.create(x + BoxSize, y + BoxSize, 0),
-                        adsk.core.Point3D.create(x, y + BoxSize, 0)
-                    ]
-                    
-                    #Square = QRSketch.sketchCurves.sketchLines.addTwoPointRectangle(rect_points[0], rect_points[2]) 
-                    Line = adsk.core.Line3D.create(rect_points[0], rect_points[2])
-                    (__, SP, EP) = Line.evaluator.getParameterExtents()
-                    (__, MP) = Line.evaluator.getPointAtParameter((SP + EP) / 2)
-                    RLine = adsk.core.Line3D.create(rect_points[0], rect_points[1])
-                    LineLength = Line.startPoint.distanceTo(Line.endPoint)
-                    Circle = QRSketch.sketchCurves.sketchCircles.addByCenterRadius(MP, LineLength / 3)
-                    progressDialog.progressValue = PixelCount
-                    PixelCount += 1
-        for Profile in QRSketch.profiles:
-            ExtrudeCollection.add(Profile)
-        extrude = QRComp.component.features.extrudeFeatures                    
-        Distance = adsk.core.ValueInput.createByReal(1)
-        ExtrudeBody = extrude.addSimple(ExtrudeCollection, Distance, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        ExtrudeBody.dissolve()
-        QRSketch.deleteMe()
-        for body in QRComp.bRepBodies:
-            body.isSelectable = False
-        progressDialog.hide()
+def CreateSquare(MP, BoxSize, LineLength, LineWidth):
+    tempBrepMgr = adsk.fusion.TemporaryBRepManager.get()  
+    orientedBoundBox = adsk.core.OrientedBoundingBox3D.create(MP, LineLength, LineWidth, BoxSize, BoxSize, 1)
+    Square = tempBrepMgr.createBox(orientedBoundBox)
+    return Square
 
-    except:
-        if ui:
-            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+def CreateCube(MP, BoxSize, LineLength, LineWidth):
+    tempBrepMgr = adsk.fusion.TemporaryBRepManager.get()  
+    orientedBoundBox = adsk.core.OrientedBoundingBox3D.create(MP, LineLength, LineWidth, BoxSize, BoxSize, BoxSize)
+    Square = tempBrepMgr.createBox(orientedBoundBox)
+    return Square
+
+def CreateSphere(MP, BoxSize):
+    tempBrepMgr = adsk.fusion.TemporaryBRepManager.get()  
+    Sphere = tempBrepMgr.createSphere(MP, BoxSize/2)
+    return Sphere
+
+
+def CreateCircle(MP, BoxSize):
+    MP: adsk.core.Point3D = adsk.core.Point3D.create(MP.x, MP.y, -0.5)
+    tempBrepMgr = adsk.fusion.TemporaryBRepManager.get()
+    P = adsk.core.Point3D.create(MP.x, MP.y, 0.5)
+    Circle = tempBrepMgr.createCylinderOrCone(MP, BoxSize / 2.1, P, BoxSize / 2.1)
+    return Circle
