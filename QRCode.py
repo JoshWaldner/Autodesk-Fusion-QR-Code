@@ -1,12 +1,17 @@
 import math
 from .lib import fusionAddInUtils as futil
 import adsk.core
-from .lib import qrcode as qrcode
-#import qrcode as qrcode
 import os
 import adsk.fusion
 import traceback
-#from . import config
+try:
+    from .lib import qrcode as qrcode
+except:
+    import re
+    import shutil
+    CopyPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib', 'qrcode')
+    PastePath = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(re.__cached__))), "site-packages", "qrcode")
+    shutil.copytree(CopyPath, PastePath)
 app = adsk.core.Application.get()
 ui = app.userInterface
 # TODO *** Specify the command identity information. ***
